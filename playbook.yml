@@ -1,0 +1,6 @@
+- name: apply initial config to our server
+  hosts: init_config
+  user: ubuntu
+  become: yes
+  roles:
+    - init_config

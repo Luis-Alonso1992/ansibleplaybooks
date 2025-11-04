@@ -1,0 +1,4 @@
+deploy_user: deployer
+deploy_group: deployers
+ssh_dir: "/home/lalonso/"
+ssh_key_name: "convertedkey"
