@@ -1,0 +1,6 @@
+- name: Install Nginx and setup V1
+  hosts: init_config
+  user: ubuntu
+  become: yes
+  roles:
+    - ngnix 

@@ -1,0 +1,12 @@
+- name: Upate my OS
+  hosts: init_config
+  user: deployer
+  become: yes
+  tasks:
+    - name: Update OS
+      ansible.builtin.apt:
+        update_cache: yes
+        upgrade: yes
+        cache_valid_time: 3600
+    - name: Reboot
+      ansible.builtin.reboot:
