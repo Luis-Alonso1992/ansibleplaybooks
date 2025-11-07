@@ -1,0 +1,63 @@
+- name: Rotate SSH keys safely (control = lalonso, targets = deployer)
+  hosts: all
+  become: true  # needed to modify authorized_keys remotely
+  vars:
+    backup_dir: "/home/{{ ansible_user }}/.ssh/backup"
+    new_key_path: "/home/lalonso/.ssh/id_ed25519_new"
+    old_key_path: "/home/lalonso/.ssh/id_ed25519.pub"
+    old_key_content: "{{ lookup('file', old_key_path) | default('', true) }}"
+
+  tasks:
+    # Generate new SSH key pair locally if it doesn't exist
+    - name: Generate new SSH key pair
+      ansible.builtin.command: ssh-keygen -t ed25519 -f {{ new_key_path }} -N ""
+      delegate_to: localhost
+      run_once: true
+      args:
+        creates: "{{ new_key_path }}"
+
+    # Read new public key content
+    - name: Read new public key content
+      ansible.builtin.slurp:
+        src: "{{ new_key_path }}.pub"
+      delegate_to: localhost
+      run_once: true
+      register: new_public_key_content
+
+    # Backup authorized_keys on remote target
+    - name: Backup authorized_keys on target
+      ansible.builtin.shell: |
+        mkdir -p {{ backup_dir }}
+        if [ -f ~/.ssh/authorized_keys ]; then
+          cp -f ~/.ssh/authorized_keys {{ backup_dir }}/authorized_keys_$(date +%F_%H-%M-%S).bak
+        fi
+      args:
+        executable: /bin/bash
+
+    # Add new public key to deployer account
+    - name: Add new SSH key to authorized_keys
+      ansible.posix.authorized_key:
+        user: "{{ ansible_user }}"
+        state: present
+        key: "{{ new_public_key_content.content | b64decode }}"
+        key_options: "no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty"
+
+    # Verify SSH works using the new key
+    - name: Verify new key works
+      ansible.builtin.command: >
+        ssh -o BatchMode=yes -o StrictHostKeyChecking=no
+        -i {{ new_key_path }} {{ ansible_user }}@{{ inventory_hostname }} uptime
+      delegate_to: localhost
+      register: new_key_test_result
+      changed_when: false
+      failed_when: new_key_test_result.rc != 0
+
+    # Remove old key after verification
+    - name: Remove old key
+      ansible.posix.authorized_key:
+        user: "{{ ansible_user }}"
+        state: absent
+        key: "{{ old_key_content }}"
+      when:
+        - old_key_content != ''
+        - new_key_test_result.rc == 0
